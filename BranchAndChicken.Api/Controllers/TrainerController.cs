@@ -18,14 +18,14 @@ namespace BranchAndChicken.Api.Controllers
             return repo.GetAll();
         }
 
-        [HttpGet("{name}")]
+        [HttpGet("{name}")] //5:00 minute mark on 10/29/19
         public ActionResult<Trainer> GetByName(string name)
         {
             var repo = new TrainerRepository();
             return repo.Get(name);
         }
 
-        [HttpGet("{id}")]
+        [HttpGet("{id:int}")]
         public ActionResult<Trainer> GetById(int id)
         {
             throw new NotImplementedException();

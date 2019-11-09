@@ -1,85 +1,61 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using BranchAndChicken.Api.Models;
+﻿using BranchAndChicken.Api.Models;
+using Dapper;
 using Microsoft.AspNetCore.Mvc;
+using System;
+using System.Collections.Generic;
 using System.Data.SqlClient;
+
 
 namespace BranchAndChicken.Api.DataAccess
 {
     public class TrainerRepository
     {
-        //static List<Trainer> _trainers = new List<Trainer>
-        //{
-        //    new Trainer
-        //    {
-        //        Name = "Nathan",
-        //        Specialty = Specialty.TaeCluckDoe,
-        //        YearsOfExperience = 0
-        //    },
-        //    new Trainer
-        //    {
-        //        Name = "Martin",
-        //        Specialty = Specialty.Chudo,
-        //        YearsOfExperience = 12
-        //    },
-        //    new Trainer
-        //    {
-        //        Name = "Adam",
-        //        Specialty = Specialty.ChravBacaw,
-        //        YearsOfExperience = 3
-        //    }
-        //};
-
         string _connectionString = "Server=localhost;Database=BranchAndChicken;Trusted_Connection=True;";
 
         public List<Trainer> GetAll()
         {
-            var connection = new SqlConnection(_connectionString);
-            connection.Open();
-
-            var cmd = connection.CreateCommand();
-            cmd.CommandText = @"Select * 
-                                From Trainer";
-
-            var dataReader = cmd.ExecuteReader();
-
-            while (dataReader.Read())
+            using (var db = new SqlConnection(_connectionString))
             {
-                //explicit cast
-                var id = (int)dataReader["Id"];
-                //implicit cast
-                var name = dataReader["name"] as string;
-                //convert to
-                var yearsOfExperience = Convert.ToInt32(dataReader["YearsOfExperience"]);
-                //try parse
-                Enum.TryParse<Specialty>(dataReader["speciality"].ToString(), out var speciality);
+                var trainers = db.Query<Trainer>("Select Id,Name,YearsOfExperience,Specialty From Trainer");
 
-                var trainer = new Trainer
+                foreach (var trainer in trainers)
                 {
-                    Specialty = speciality,
-                    Id = id,
-                    Name = name,
-                    YearsOfExperience = yearsOfExperience
-                };
+                    var chickenRepo = new ChickenRepository();
+                    var chickensForTrainer = chickenRepo.GetChickensForTrainer(trainer.Id);
 
+                    trainer.Coop.AddRange(chickensForTrainer);
+                }
+
+                return trainers.AsList();
             }
-
-
-            return _trainers;
         }
 
         public Trainer Get(string name)
         {
-            var trainer = _trainers.First(t => t.Name == name);
-            return trainer;
+            using (var db = new SqlConnection(_connectionString))
+            {
+                var sql = @"select *
+                            from Trainer
+                            where Trainer.Name = @trainerName";
+
+                var parameters = new { trainerName = name };
+
+                var trainer = db.QueryFirst<Trainer>(sql, parameters);
+
+                return trainer;
+            }
         }
 
-        public void Remove(string name)
+        public bool Remove(string name)
         {
-            var trainer = Get(name);
+            using (var db = new SqlConnection(_connectionString))
+            {
+                var sql = @"delete 
+                            from trainer 
+                            where [name] = @name";
 
-            _trainers.Remove(trainer);
+                return db.Execute(sql, new { name }) == 1;
+            }
         }
 
         public ActionResult<Trainer> GetSpecialty(string specialty)
@@ -89,18 +65,47 @@ namespace BranchAndChicken.Api.DataAccess
 
         public Trainer Update(Trainer updatedTrainer, int id)
         {
-            var trainerToUpdate = _trainers.First(trainer => trainer.Id == id);
-            trainerToUpdate.Name = updatedTrainer.Name;
-            trainerToUpdate.YearsOfExperience = updatedTrainer.YearsOfExperience;
-            trainerToUpdate.Specialty = updatedTrainer.Specialty;
-            return trainerToUpdate;
+            using (var db = new SqlConnection(_connectionString))
+            {
+                var sql = @"UPDATE [Trainer]
+                                SET [Name] = @name
+                                    ,[YearsOfExperience] = @yearsOfExperience
+                                    ,[Specialty] = @specialty
+                            output inserted.*
+                                WHERE id = @id";
+
+                //var parameters = new
+                //{
+                //    Id = id,
+                //    Name = updatedTrainer.Name,
+                //    YearsOfExperience = updatedTrainer.YearsOfExperience,
+                //    Specialty = updatedTrainer.Specialty
+                //};
+
+                updatedTrainer.Id = id;
+
+                var trainer = db.QueryFirst<Trainer>(sql, updatedTrainer);
+
+                return trainer;
+            }
         }
 
         public Trainer Add(Trainer newTrainer)
         {
-            _trainers.Add(newTrainer);
-            return newTrainer;
+            using (var db = new SqlConnection(_connectionString))
+            {
+                var sql = @"INSERT INTO [Trainer]
+                                           ([Name]
+                                           ,[YearsOfExperience]
+                                           ,[Specialty])
+	                                 output inserted.*
+                                     VALUES
+                                           (@name
+                                           ,@yearsOfExperience
+                                           ,@specialty)";
+
+                return db.QueryFirst<Trainer>(sql, newTrainer);
+            }
         }
     }
-}
 }
